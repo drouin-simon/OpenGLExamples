@@ -1,4 +1,12 @@
+#include "GL/glew.h"
+
+// Cross-platform include GLUT
+#if defined(__APPLE__) && defined(__MACH__)
+#include <glut.h>
+#else
 #include <GL/glut.h>
+#endif
+
 #include <stdlib.h>
 #include <math.h>
 
@@ -7,7 +15,7 @@ int winWidth = 800;
 int winHeight = 600;
 int winX = 50;
 int winY = 50;
-const char appName[] = "Glut 3D template";
+const char appName[] = "CubeClipping";
 
 // Camera params
 double cameraDistance = 800.0;
@@ -62,6 +70,9 @@ void DrawCube()
 
 void display(void)
 {
+    glEnable( GL_CULL_FACE );
+
+    glClearColor( 0.0f, 0.0f, 0.0f, 0.0f);
 	glClear( GL_COLOR_BUFFER_BIT );
 
     // Position camera ( look at (0, 0, 0) )
@@ -100,14 +111,6 @@ void display(void)
 }
 
 
-void init(void) 
-{
-   glClearColor( 0.0f, 0.0f, 0.0f, 0.0f);
-   glEnable( GL_CULL_FACE );
-
-   // enable texturing
-   glEnable( GL_TEXTURE_2D );
-}
 
 
 void reshape( int w, int h )
@@ -236,6 +239,12 @@ void special_up(int key, int x, int y)
 void Idle(void)
 {
 }
+
+void init(void)
+{
+   glewInit();
+}
+
    
 int main(int argc, char** argv)
 {

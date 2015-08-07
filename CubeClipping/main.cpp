@@ -157,8 +157,8 @@ void RenderClipPlane( Vec3 pos, Vec3 lookAt, Vec3 camUp, double near, double rat
     Vec3 camDir = lookAt - pos;
     camDir.Normalise();
     Vec3 planeCenter = pos + planeDist * camDir;
-    Vec3 right = cross( camDir, camUp );
-    Vec3 down = cross( camDir, right );
+    Vec3 right = cross( camDir, camUp ).Normalise();
+    Vec3 down = cross( camDir, right ).Normalise();
 
     Vec3 p0 = planeCenter - halfWidth * right + halfHeight * down;
     Vec3 p1 = planeCenter + halfWidth * right + halfHeight * down;
@@ -167,23 +167,25 @@ void RenderClipPlane( Vec3 pos, Vec3 lookAt, Vec3 camUp, double near, double rat
 
     glColor4d( 1.0, 1.0, 0.0, 0.0 );
 
+    // find color according to cube plane points in cube coord
+    Mat4 t = HTrans4( Vec3( -0.5, -0.5, -0.5 ) );
+    Mat4 s = HScale4( Vec3( 200.0, 200.0, 200.0 ) );
+    Mat4 cubeToWorld = s * t;
+    Mat4 worldToCube = inv( cubeToWorld );
+    Vec4 c0 = worldToCube * Vec4( p0, 1.0 );
+    Vec4 c1 = worldToCube * Vec4( p1, 1.0 );
+    Vec4 c2 = worldToCube * Vec4( p2, 1.0 );
+    Vec4 c3 = worldToCube * Vec4( p3, 1.0 );
+
     glBegin( GL_QUADS );
-        glVertex( p0 );
-        glVertex( p1 );
-        glVertex( p2 );
-        glVertex( p3 );
+        glColor3d( c0[0], c0[1], c0[2] ); glVertex( p0 );
+        glColor3d( c1[0], c1[1], c1[2] ); glVertex( p1 );
+        glColor3d( c2[0], c2[1], c2[2] ); glVertex( p2 );
+        glColor3d( c3[0], c3[1], c3[2] ); glVertex( p3 );
     glEnd();
 
     clippingShader->UseProgram( false );
     glDisable( GL_TEXTURE_RECTANGLE_ARB );
-
-    //glm::mat4 t = glm::translate( glm::mat4(1.0f), glm::vec3(-0.5) );
-    //glm::mat4 s = glm::scale( glm::mat4(1.0f), glm::vec3( 200.0 ) );
-    //glm::mat4 cubeToWorld = s * t;
-    //glm::mat4 worldToCube = glm::inverse( cubeToWorld );
-    //glm::vec4 testCoord( -100.0, -100.0, -100.0, 1.0 );
-    //glm::vec4 transformed = worldToCube * testCoord;
-    //cout << "orig: ( " << testCoord.x << ", " << testCoord.y << ", " << testCoord.z << " ) transformed: ( " << transformed.x << ", " << transformed.y << ", " << transformed.z << " )" << endl;
 }
 
 void display(void)
@@ -319,7 +321,7 @@ void mouse(int button, int state, int x, int y)
             isRotatingCamera = false;
         }
     }
-    else if( button = GLUT_RIGHT_BUTTON )
+    else if( button == GLUT_RIGHT_BUTTON )
     {
         if( state == GLUT_DOWN )
         {

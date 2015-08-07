@@ -4,9 +4,9 @@
 
 using namespace std;
 
-static const GLenum pixelType = GL_FLOAT;
+static const GLenum pixelType = GL_UNSIGNED_BYTE;
 static const GLenum pixelFormat = GL_RGBA;
-static const int pixelInternalFormat = GL_RGBA16F_ARB;
+static const int pixelInternalFormat = GL_RGBA8;
 
 DrawableTexture::DrawableTexture()
 	: m_texId(0)

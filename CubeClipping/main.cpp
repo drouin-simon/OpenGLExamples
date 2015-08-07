@@ -7,8 +7,11 @@
 #include <GL/glut.h>
 #endif
 
+#include "SVL.h"
+#include "SVLgl.h"
 #include <stdlib.h>
 #include <math.h>
+#include "DrawableTexture.h"
 
 // original app params
 int winWidth = 800;
@@ -24,8 +27,53 @@ double cameraAngle2 = 0.0;
 double maxCamAngle2 = 1.57;
 
 bool showFront = true;
+bool showMask = false;
+DrawableTexture * mask = 0;
 
 void DrawCube()
+{
+    glBegin( GL_QUADS );
+    {
+        // front ( x+ normal )
+        glVertex3d( 100, -100, -100 );
+        glVertex3d( 100, 100, -100 );
+        glVertex3d( 100, 100, 100 );
+        glVertex3d( 100, -100, 100 );
+
+        // right ( y+ normal )
+        glVertex3d( 100, 100, -100 );
+        glVertex3d( -100, 100, -100 );
+        glVertex3d( -100, 100, 100 );
+        glVertex3d( 100, 100, 100 );
+
+        // back ( x- normal )
+        glVertex3d( -100, 100, -100 );
+        glVertex3d( -100, -100, -100 );
+        glVertex3d( -100, -100, 100 );
+        glVertex3d( -100, 100, 100 );
+
+        // left ( y- normal )
+        glVertex3d( -100, -100, -100 );
+        glVertex3d( 100, -100, -100 );
+        glVertex3d( 100, -100, 100 );
+        glVertex3d( -100, -100, 100 );
+
+        // top ( z+ normal )
+        glVertex3d( 100, -100, 100 );
+        glVertex3d( 100, 100, 100 );
+        glVertex3d( -100, 100, 100 );
+        glVertex3d( -100, -100, 100 );
+
+        // bottom ( z- normal )
+        glVertex3d( 100, -100, -100 );
+        glVertex3d( -100, -100, -100 );
+        glVertex3d( -100, 100, -100 );
+        glVertex3d( 100, 100, -100 );
+    }
+    glEnd();
+}
+
+void DrawCubeWithColor()
 {
     glBegin( GL_QUADS );
     {
@@ -68,13 +116,79 @@ void DrawCube()
     glEnd();
 }
 
+#include <iostream>
+#include "GlslShader.h"
+
+using namespace std;
+double epsilon = 0.0001;
+
+GlslShader * clippingShader = 0;
+
+const char * clippingShaderCode = " \
+uniform sampler2DRect mask; \
+void main() \
+{ \
+    vec4 maskSample = texture2DRect( mask, gl_FragCoord.xy ); \
+    if( maskSample.x < 0.1 ) \
+    { \
+        discard; \
+    } \
+    gl_FragColor = gl_Color; \
+} ";
+
+void RenderClipPlane( Vec3 pos, Vec3 lookAt, Vec3 camUp, double near, double ratio, double lensAngle )
+{
+    if( !clippingShader )
+    {
+        clippingShader = new GlslShader;
+        clippingShader->AddShaderMemSource( clippingShaderCode );
+        clippingShader->Init();
+    }
+
+    clippingShader->UseProgram( true );
+    clippingShader->SetVariable( "mask", 0 );
+    glEnable( GL_TEXTURE_RECTANGLE_ARB );
+    glBindTexture( GL_TEXTURE_RECTANGLE_ARB, mask->GetTexId() );
+
+    float planeDist = near + epsilon;
+    double halfWidth = planeDist * tan( lensAngle );
+    double halfHeight = halfWidth * ratio;
+
+    Vec3 camDir = lookAt - pos;
+    camDir.Normalise();
+    Vec3 planeCenter = pos + planeDist * camDir;
+    Vec3 right = cross( camDir, camUp );
+    Vec3 down = cross( camDir, right );
+
+    Vec3 p0 = planeCenter - halfWidth * right + halfHeight * down;
+    Vec3 p1 = planeCenter + halfWidth * right + halfHeight * down;
+    Vec3 p2 = planeCenter + halfWidth * right - halfHeight * down;
+    Vec3 p3 = planeCenter - halfWidth * right - halfHeight * down;
+
+    glColor4d( 1.0, 1.0, 0.0, 0.0 );
+
+    glBegin( GL_QUADS );
+        glVertex( p0 );
+        glVertex( p1 );
+        glVertex( p2 );
+        glVertex( p3 );
+    glEnd();
+
+    clippingShader->UseProgram( false );
+    glDisable( GL_TEXTURE_RECTANGLE_ARB );
+
+    //glm::mat4 t = glm::translate( glm::mat4(1.0f), glm::vec3(-0.5) );
+    //glm::mat4 s = glm::scale( glm::mat4(1.0f), glm::vec3( 200.0 ) );
+    //glm::mat4 cubeToWorld = s * t;
+    //glm::mat4 worldToCube = glm::inverse( cubeToWorld );
+    //glm::vec4 testCoord( -100.0, -100.0, -100.0, 1.0 );
+    //glm::vec4 transformed = worldToCube * testCoord;
+    //cout << "orig: ( " << testCoord.x << ", " << testCoord.y << ", " << testCoord.z << " ) transformed: ( " << transformed.x << ", " << transformed.y << ", " << transformed.z << " )" << endl;
+}
+
 void display(void)
 {
-    glEnable( GL_CULL_FACE );
-
-    glClearColor( 0.0f, 0.0f, 0.0f, 0.0f);
-	glClear( GL_COLOR_BUFFER_BIT );
-
+    // Setup cam and matrices
     // Position camera ( look at (0, 0, 0) )
     glMatrixMode(GL_MODELVIEW);
     double x = cameraDistance * cos(cameraAngle1) * cos(cameraAngle2);
@@ -98,20 +212,62 @@ void display(void)
     glFrustum( left, right, bottom, top, near, far );
 
     glMatrixMode( GL_MODELVIEW );
-    glColor4d( 1.0, 0.0, 0.0, 1.0 );
 
-    if( showFront )
-        glCullFace( GL_BACK );
-    else
-        glCullFace( GL_FRONT );
+    // draw cube to the texture with invert blending to create
+    // a mask of areas of the front side that have been clipped.
+    if( !mask )
+    {
+        mask = new DrawableTexture;
+        mask->Init( winWidth, winHeight );
+    }
+    mask->Resize( winWidth, winHeight );
+    mask->DrawToTexture( true );
+    glClearColor( 0.0, 0.0, 0.0, 0.0 );
+    glClear( GL_COLOR_BUFFER_BIT );
 
+    glEnable( GL_CULL_FACE );
+    glDisable( GL_BLEND );
+    glDisable( GL_DEPTH_TEST );
+    glEnable( GL_COLOR_LOGIC_OP );
+    glLogicOp( GL_INVERT );
+
+    glColor4d( 1.0, 1.0, 1.0, 1.0 );
+    glCullFace( GL_FRONT );
     DrawCube();
+    glCullFace( GL_BACK );
+    DrawCube();
+
+    glDisable( GL_COLOR_LOGIC_OP );
+    glDisable( GL_CULL_FACE );
+
+    mask->DrawToTexture( false );
+
+    glClearColor( 0.0f, 0.0f, 0.0f, 0.0f );
+    glClear( GL_COLOR_BUFFER_BIT );
+    if( showMask )
+    {
+        glEnable( GL_BLEND );
+        glColor4d( 1.0, 1.0, 1.0, 1.0 );
+        mask->PasteToScreen();
+    }
+    else
+    {
+        glEnable( GL_CULL_FACE );
+        if( showFront )
+            glCullFace( GL_BACK );
+        else
+            glCullFace( GL_FRONT );
+
+        DrawCubeWithColor();
+
+        Vec3 pos( x, y, z );
+        Vec3 lookAt( 0.0, 0.0, 0.0 );
+        Vec3 camUp( 0.0, 0.0, 1.0 );
+        RenderClipPlane( pos, lookAt, camUp, near, ratio, lensAngle );
+    }
 
     glutSwapBuffers();
 }
-
-
-
 
 void reshape( int w, int h )
 {
@@ -198,6 +354,9 @@ void keyboard (unsigned char key, int x, int y)
 	   break;
    case 'f':
        showFront = !showFront;
+       break;
+   case 'm':
+       showMask = !showMask;
        break;
 	}
    glutPostRedisplay();

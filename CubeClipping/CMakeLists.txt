@@ -4,9 +4,6 @@ PROJECT( ${theProjectName} )
 
 cmake_minimum_required(VERSION 2.6)
 
-add_subdirectory( ${CMAKE_CURRENT_SOURCE_DIR}/../Glew ${CMAKE_CURRENT_BINARY_DIR}/Glew )
-include_directories( ${GlewLibIncludeDir} )
-
 find_package(GLUT)
 if(GLUT_FOUND)
 	include_directories( ${GLUT_INCLUDE_DIR} )
